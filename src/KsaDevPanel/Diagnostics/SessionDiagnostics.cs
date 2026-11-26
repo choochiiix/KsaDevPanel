@@ -106,7 +106,8 @@ public sealed class SessionDiagnostics
                 SessionScene.Editor => "editor",
                 _ => "startup or transition"
             };
-            var ready = scene is SessionScene.World or SessionScene.Editor;
+            // The editor is an active scene, but it is not a loaded flight world.
+            var ready = scene == SessionScene.World;
             if (_scene != label)
             {
                 _scene = label;

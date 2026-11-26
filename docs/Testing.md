@@ -18,6 +18,7 @@ The current inspection/diagnostics commands are:
 
 ```powershell
 .local/dotnet/dotnet.exe run --project tests/KsaDevPanel.Diagnostics.Tests
+.local/dotnet/dotnet.exe run --project tests/KsaDevPanel.Lifecycle.Tests
 .local/dotnet/dotnet.exe run --project tests/KsaDevPanel.Inspection.Tests
 pwsh -NoProfile -File tools/Test-InspectionTools.ps1
 ```
@@ -33,5 +34,10 @@ Use the disposable instance for the runtime scenarios.
 6. Roll back the mod entry, relaunch, and confirm the shared Core baseline starts without the workbench.
 7. Open the Performance tab and wait for at least two samples. Confirm CPU model and reported current speed, KSA process CPU and memory, whole-system CPU and RAM, and GPU engine utilization populate when available. Compare CPU and RAM with Task Manager. Compare GPU engine activity, adapter identity and local/non-local memory use/budget with Task Manager for the same KSA process and adapter. Confirm missing driver/API readings say **Unavailable**, do not show zero, and do not prevent CPU/RAM readings. Leave the panel open in menu and world scenes, then unload/exit and confirm the sampler stops cleanly.
 8. In Performance, select several CPU, RAM, and GPU metrics. Confirm each selection opens its own five-minute graph with correct units and current/minimum/maximum; select **Back** and switch metrics. Check that unavailable GPU samples appear as gaps instead of zeroes and that the oldest points roll off as new samples arrive.
+
+9. In a disposable Earth-and-Moon world, start with a coasting active vessel at 1×. In **Set Orbit**, select Earth and apply a 400 km circular orbit. Check the stock map and resulting parent, both apses (within 1 km), and vessel identity. At 1× apply an Earth orbit with 400 km periapsis, 800 km apoapsis, and 30° inclination. Verify both apses and the selected placement point, then repeat about Luna and verify the parent changes. Save to a disposable slot and reload to check that the new orbit persists.
+10. Open the tab without an active vessel, switch vessels or worlds while editing, and try reversed apses, a periapsis below the allowed floor, and an orbit beyond the supported sphere of influence. Confirm stale or invalid requests cannot apply. Verify that clicking once moves only the named vessel once.
+
+11. In **Lifecycle**, confirm the observed scene and world-readiness state. In a loaded world, verify the active vessel ID and that snapshot age stays fresh; after a vessel switch, verify the sampled ID follows the new vessel. Observe an editor or menu/transition state and confirm flight-vessel status clears. If a read becomes unavailable while the world remains loaded, confirm the last successful snapshot age advances and eventually reports stale. The tab must not show a stale vessel as current, exception text, paths, or save data.
 
 See [Verification](Verification.md) for outcomes and [Development](Development.md) for the local workflow.

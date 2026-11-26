@@ -2,7 +2,9 @@
 
 StarMap loads `DevPanelMod` from the isolated profile manifest. The BeforeMain callback verifies the host build, API and effective documents path, then creates the run marker. AfterGui samples live state and passes an immutable vessel snapshot to the workbench. The snapshot is replaced on every draw. The adapter owns all live game reads.
 
-Session diagnostics hold bounded, structured events and format a compact clipboard report. The workbench owns the hotkey and layout. Settings are stored in the verified isolated profile. The mod has no gameplay commands and adds no Harmony patches of its own.
+Session diagnostics hold bounded, structured events and format a compact clipboard report. The workbench owns the hotkey and layout. Settings are stored in the verified isolated profile. The Set Orbit tab is the workbench command surface. KsaOrbitAdapter keeps the pinned native orbit construction and teleport input queue separate from the pure orbit model and vessel inspection. A request rechecks world and vessel identity and requires 1× time with auto warp off. The game applies the queued command. The mod adds no Harmony patches.
+
+The Lifecycle tab receives a fresh immutable `RuntimeContextStatus` assembled in the StarMap GUI callback. It contains normalized labels, readiness, vessel identity, and monotonic sample age; it retains no KSA object. A successful vessel read refreshes the timestamp. Scene, system, or vessel changes reset its baseline; a failed read inside a still-ready world preserves the last success and lets it become visibly stale. Unavailability is shown as a bounded category rather than exception text. Scene classification is limited to the build-pinned `Program.IsEditorOpen` and `Program.IsLoaded` flags.
 
 ## Performance sampling
 

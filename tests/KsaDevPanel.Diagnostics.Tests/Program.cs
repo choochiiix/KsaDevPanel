@@ -10,6 +10,7 @@ var tests = new (string Name, Action Body)[]
     ("startup writes one marker and is idempotent", StartupIsSingleMarker),
     ("startup values are bounded and line-safe", StartupValuesAreSafe),
     ("observations are coalesced and included", ObservationsAreCoalesced),
+    ("editor is not reported as a flight world", EditorIsNotAFlightWorld),
     ("summary and event buffer are bounded", SummaryIsBounded),
 };
 
@@ -99,6 +100,15 @@ static void SummaryIsBounded()
     var eventText = summary[(summary.IndexOf("events=", StringComparison.Ordinal) + "events=".Length)..];
     Assert(eventText.Split(',', StringSplitOptions.RemoveEmptyEntries).Length <= 16, "event buffer must have a hard count bound");
     Assert(!summary.Contains("saves", StringComparison.OrdinalIgnoreCase), "summary must not include save data");
+}
+
+static void EditorIsNotAFlightWorld()
+{
+    var diagnostics = new SessionDiagnostics();
+    diagnostics.ObserveScene(SessionScene.Editor);
+    var summary = diagnostics.CopySummary();
+    Assert(summary.Contains("scene=editor", StringComparison.Ordinal), "editor scene should be reported");
+    Assert(summary.Contains("world=not-ready", StringComparison.Ordinal), "editor should not be called a ready flight world");
 }
 
 static string CaptureStdout(Action action)

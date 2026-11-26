@@ -11,7 +11,7 @@
       <HintPath>$(StarMapDirectory)/StarMap.API.dll</HintPath>
       <Private>false</Private>
     </Reference>
-    <Reference Include="$(KsaGameDirectory)/KSA.dll;$(KsaGameDirectory)/Brutal.*.dll" Private="false" />
+    <Reference Include="$(KsaGameDirectory)/KSA.dll;$(KsaGameDirectory)/Brutal.*.dll;$(KsaGameDirectory)/Planet.Render.Core.dll" Private="false" />
     <None Update="mod.toml" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <Target Name="CheckGameReferences" BeforeTargets="ResolveAssemblyReferences">

@@ -5,6 +5,7 @@ using System.Text.Json;
 using Brutal.ImGuiApi;
 using Brutal.Numerics;
 using KsaDevPanel.Performance;
+using KsaDevPanel.OrbitEditing;
 
 namespace KsaDevPanel.UI;
 
@@ -32,6 +33,7 @@ public sealed class Workbench : IDisposable
     private string? _displayVesselId;
     private string _settingsStatus = "Settings are current.";
     private string? _selectedPerformanceMetric;
+    private readonly OrbitEditorView _orbitEditor = new();
     private bool _disposed;
 
     public Workbench(string settingsPath)
@@ -69,7 +71,12 @@ public sealed class Workbench : IDisposable
         KsaDevPanel.Diagnostics.SessionDiagnostics diagnostics,
         KsaDevPanel.Inspection.VesselSnapshot? snapshot,
         PerformanceSnapshot? performanceSnapshot,
-        PerformanceHistorySnapshot? performanceHistory)
+        PerformanceHistorySnapshot? performanceHistory,
+        Func<IReadOnlyList<OrbitBodySnapshot>>? readOrbitBodies = null,
+        Func<string, OrbitElements, string>? applyOrbit = null,
+        string? orbitVesselId = null,
+        int orbitContextVersion = 0,
+        KsaDevPanel.Diagnostics.LifecycleHealthStatus? lifecycleHealth = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
@@ -82,7 +89,7 @@ public sealed class Workbench : IDisposable
             CaptureHotkey();
 
         if (_showWindow)
-            DrawDashboard(diagnostics, snapshot, performanceSnapshot, performanceHistory);
+            DrawDashboard(diagnostics, snapshot, performanceSnapshot, performanceHistory, readOrbitBodies, applyOrbit, orbitVesselId, orbitContextVersion, lifecycleHealth);
 
         if (Environment.TickCount64 >= _nextSave)
         {
@@ -103,7 +110,12 @@ public sealed class Workbench : IDisposable
         KsaDevPanel.Diagnostics.SessionDiagnostics diagnostics,
         KsaDevPanel.Inspection.VesselSnapshot? snapshot,
         PerformanceSnapshot? performanceSnapshot,
-        PerformanceHistorySnapshot? performanceHistory)
+        PerformanceHistorySnapshot? performanceHistory,
+        Func<IReadOnlyList<OrbitBodySnapshot>>? readOrbitBodies,
+        Func<string, OrbitElements, string>? applyOrbit,
+        string? orbitVesselId,
+        int orbitContextVersion,
+        KsaDevPanel.Diagnostics.LifecycleHealthStatus? lifecycleHealth)
     {
         if (_applyLayout)
         {
@@ -148,12 +160,22 @@ public sealed class Workbench : IDisposable
                 DrawVesselInspector(snapshot);
                 ImGui.EndTabItem();
             }
+            if (ImGui.BeginTabItem("Lifecycle", default))
+            {
+                LifecycleHealthView.Draw(lifecycleHealth);
+                ImGui.EndTabItem();
+            }
             if (ImGui.BeginTabItem("Performance", default))
             {
                 _selectedPerformanceMetric = PerformanceTabView.Draw(
                     performanceSnapshot,
                     performanceHistory,
                     _selectedPerformanceMetric);
+                ImGui.EndTabItem();
+            }
+            if (ImGui.BeginTabItem("Set Orbit", default))
+            {
+                _orbitEditor.Draw(readOrbitBodies, applyOrbit, orbitVesselId, orbitContextVersion);
                 ImGui.EndTabItem();
             }
             if (ImGui.BeginTabItem("Diagnostics", default))

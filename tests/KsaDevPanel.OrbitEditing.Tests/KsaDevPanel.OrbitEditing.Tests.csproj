@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RestoreIgnoreFailedSources>true</RestoreIgnoreFailedSources>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../src/KsaDevPanel/OrbitEditing/OrbitBodySnapshot.cs" Link="OrbitEditing/OrbitBodySnapshot.cs" />
+    <Compile Include="../../src/KsaDevPanel/OrbitEditing/OrbitElements.cs" Link="OrbitEditing/OrbitElements.cs" />
+    <Compile Include="../../src/KsaDevPanel/OrbitEditing/OrbitModel.cs" Link="OrbitEditing/OrbitModel.cs" />
+    <Compile Include="../../src/KsaDevPanel/OrbitEditing/OrbitState.cs" Link="OrbitEditing/OrbitState.cs" />
+    <Compile Include="../../src/KsaDevPanel/OrbitEditing/OrbitVector3.cs" Link="OrbitEditing/OrbitVector3.cs" />
+  </ItemGroup>
+</Project>

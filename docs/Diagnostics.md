@@ -36,6 +36,20 @@ observation); repeated per-frame observations are coalesced.
 clipboard itself. The in-memory event buffer holds at most 16 entries and the
 returned text is capped at 2,048 characters. The summary contains the run ID,
 startup identity, GUI/world states, and bounded lifecycle event names only.
+The editor is recorded as an observed scene, but is not described as a ready
+flight world.
+
+## Lifecycle tab
+
+The separate Lifecycle tab shows the current scene category from the host's
+`IsEditorOpen` and `IsLoaded` flags, world readiness from current-system
+availability, and active vessel identity from the latest successful snapshot.
+A monotonic tick records successful samples. If a read temporarily fails while
+the same world remains ready, the previous sample and its age remain visible; a
+scene, system, or vessel change resets that baseline. The display uses fixed
+unavailable categories and does not show exception text, machine paths, or save
+content. `Loading or transition` is an intentional combined label because this
+adapter does not distinguish those states.
 
 ## Integration boundary
 

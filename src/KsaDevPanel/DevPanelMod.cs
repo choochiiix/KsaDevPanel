@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Reflection;
 using KsaDevPanel.Diagnostics;
 using KsaDevPanel.Inspection;
+using KsaDevPanel.OrbitEditing;
 using KsaDevPanel.Performance;
 using KsaDevPanel.UI;
 using StarMap.API;
@@ -19,6 +20,12 @@ public sealed class DevPanelMod
     private readonly VesselReader vesselReader = new(new KsaVesselSource());
     private Workbench? workbench;
     private PerformanceSampler? performanceSampler;
+    private KSA.CelestialSystem? orbitSystem;
+    private KSA.Vehicle? orbitVessel;
+    private int orbitContextVersion;
+    private long? lastSuccessfulSnapshotTick;
+    private DateTimeOffset? lastSuccessfulSnapshotUtc;
+    private string? lastSuccessfulSnapshotVesselId;
 
     [StarMapBeforeMain]
     public void Start()
@@ -58,7 +65,46 @@ public sealed class DevPanelMod
             : KSA.Program.IsLoaded ? SessionScene.World : SessionScene.Loading;
         diagnostics.ObserveScene(scene);
         var snapshot = scene == SessionScene.World ? vesselReader.Read() : null;
-        workbench.Draw(diagnostics, snapshot, performanceSampler?.Latest, performanceSampler?.History);
+        var system = scene == SessionScene.World ? KSA.Universe.CurrentSystem : null;
+        var vessel = snapshot?.IsAvailable == true ? KSA.Program.ControlledVehicle : null;
+        var nowTick = Environment.TickCount64;
+        var worldReady = scene == SessionScene.World && system is not null;
+        var systemChanged = !ReferenceEquals(orbitSystem, system);
+        var vesselSampleChanged = snapshot?.IsAvailable == true &&
+            !string.Equals(lastSuccessfulSnapshotVesselId, snapshot.Id, StringComparison.Ordinal);
+        if (scene != SessionScene.World || !worldReady || systemChanged || vesselSampleChanged)
+        {
+            lastSuccessfulSnapshotTick = null;
+            lastSuccessfulSnapshotUtc = null;
+            lastSuccessfulSnapshotVesselId = null;
+        }
+        if (worldReady && snapshot?.IsAvailable == true)
+        {
+            lastSuccessfulSnapshotTick = nowTick;
+            lastSuccessfulSnapshotUtc = DateTimeOffset.UtcNow;
+            lastSuccessfulSnapshotVesselId = snapshot.Id;
+        }
+
+        var runtimeContext = KsaDevPanel.Diagnostics.RuntimeContextStatus.Create(
+            scene,
+            worldReady,
+            snapshot,
+            nowTick,
+            lastSuccessfulSnapshotTick,
+            lastSuccessfulSnapshotVesselId: lastSuccessfulSnapshotVesselId);
+        var lifecycleHealth = KsaDevPanel.Diagnostics.LifecycleHealthStatus.From(
+            runtimeContext,
+            lastSuccessfulSnapshotUtc);
+        if (!ReferenceEquals(orbitSystem, system) || !ReferenceEquals(orbitVessel, vessel))
+        {
+            orbitSystem = system;
+            orbitVessel = vessel;
+            orbitContextVersion++;
+        }
+        workbench.Draw(diagnostics, snapshot, performanceSampler?.Latest, performanceSampler?.History,
+            system is null || vessel is null ? null : () => KsaOrbitAdapter.ReadBodies(system),
+            system is null || vessel is null ? null : (id, elements) => KsaOrbitAdapter.Apply(system, vessel, id, elements),
+            snapshot?.IsAvailable == true ? snapshot.Id : null, orbitContextVersion, lifecycleHealth);
     }
 
     [StarMapUnload]
@@ -68,6 +114,11 @@ public sealed class DevPanelMod
         performanceSampler = null;
         workbench?.Dispose();
         workbench = null;
+        orbitSystem = null;
+        orbitVessel = null;
+        lastSuccessfulSnapshotTick = null;
+        lastSuccessfulSnapshotUtc = null;
+        lastSuccessfulSnapshotVesselId = null;
     }
 
     private static string? ProductVersion(Assembly assembly)
