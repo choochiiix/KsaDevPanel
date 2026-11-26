@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/KsaDevPanel/KsaDevPanel.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/KsaDevPanel.Diagnostics.Tests/KsaDevPanel.Diagnostics.Tests.csproj" />
+    <Project Path="tests/KsaDevPanel.Inspection.Tests/KsaDevPanel.Inspection.Tests.csproj" />
+  </Folder>
+</Solution>

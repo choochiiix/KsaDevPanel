@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Version>0.1.0-alpha.1</Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="StarMap.API">
+      <HintPath>$(StarMapDirectory)/StarMap.API.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="$(KsaGameDirectory)/KSA.dll;$(KsaGameDirectory)/Brutal.*.dll" Private="false" />
+    <None Update="mod.toml" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Target Name="CheckGameReferences" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="'$(StarMapDirectory)' == '' Or !Exists('$(StarMapDirectory)/StarMap.API.dll')"
+           Text="Set StarMapDirectory to the verified StarMap 0.5.4 distribution." />
+    <Error Condition="'$(KsaGameDirectory)' == '' Or !Exists('$(KsaGameDirectory)/KSA.dll')"
+           Text="Set KsaGameDirectory to the verified read-only KSA 2026.11.25.5949 reference." />
+  </Target>
+</Project>

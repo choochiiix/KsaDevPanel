@@ -1,0 +1,16 @@
+**/bin/
+**/obj/
+.artifacts/
+.local/
+.scratch/
+**/saves/
+**/logs/
+*.local.json
+*.dll
+*.exe
+*.pdb
+*.zip
+*.nupkg
+*.log
+.vs/
+.vscode/

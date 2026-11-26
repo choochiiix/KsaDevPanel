@@ -1,0 +1,9 @@
+# KsaDevPanel development
+
+This repository targets Windows x64 KSA `2026.11.25.5949`, .NET SDK `10.0.100`, StarMap loader and API `0.5.4`, and loader-provided Harmony `2.4.3`. See [Compatibility](docs/Compatibility.md) for pins and verification status. Follow the parent workspace instructions when working in its checkout.
+
+The entry point owns host callbacks and profile validation. Diagnostics owns bounded session records and clipboard-safe formatting. UI owns ImGui rendering, input and settings. Inspection owns live game reads and passes immutable snapshots across the boundary. Keep game object references within the read adapter and confine sampling and drawing to the host draw callback. See [Architecture](docs/Architecture.md).
+
+Use [Development](docs/Development.md) for build and isolated deployment and [Testing](docs/Testing.md) for acceptance. Record commands, versions, expected and actual results, whether the game ran, and any remaining gap in [Verification](docs/Verification.md). Cite the workspace source ID plus the exact build, member or upstream revision. Review shared conclusions against the workspace research index.
+
+Update [CHANGELOG.md](CHANGELOG.md) under `[Unreleased]` in the same change as every addition or major fix. Use Added, Changed, Fixed or Removed as applicable. Use Semantic Versioning starting with `0.1.0` for the first usable release. During 0.x, bump minor for features and breaking changes, and patch for compatible fixes. From 1.0.0, bump major for breaking public contract changes, minor for compatible additions, and patch for compatible fixes. Use prerelease suffixes as needed. At release, move the entries to a dated version heading, leave a fresh Unreleased section, synchronize project and manifest versions and check the startup marker. Use a matching tag such as `v0.1.0` when tagging is authorized. Track the KSA build separately.
