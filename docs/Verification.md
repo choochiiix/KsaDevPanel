@@ -27,3 +27,16 @@ The isolated workbench appeared in a loaded-world test scenario. `@oai/sky` thro
 | Diagnostics copy | Bounded report contains run ID and observed lifecycle state without paths or save data. | **Automated formatter passed; clipboard UI acceptance pending.** |
 
 Use [Testing](Testing.md) for the full acceptance scenarios. A build, unit-test pass or startup marker is not evidence that untested gameplay behavior passed.
+
+## Performance tab addition
+
+The `.5949` source now contains a Performance tab and once-per-second background collector for process/system CPU, process/system memory, CPU name and OS-reported average current CPU frequency, per-process GPU Engine counters, and adapter-matched DXGI video-memory budget/usage. The tab retains the last five minutes in memory and lets the user select a metric to graph with ImPlot. GPU clock is intentionally omitted. CPU and RAM APIs use Windows/.NET built-ins; GPU values depend on PDH counters and a unique process-GPU-LUID to DXGI adapter match (D-PERF, official API documentation; implementation: `Performance/SystemMetricsCollector.cs`, `Performance/Gpu/GpuMetricsCollector.cs`, `Performance/PerformanceSampler.cs`, `Performance/PerformanceHistoryBuffer.cs`, `UI/PerformanceTabView.cs`, `UI/PerformanceMetricPicker.cs`, `UI/PerformanceMetricGraph.cs`).
+
+| Check | Expected | Result |
+|---|---|---|
+| `pwsh -NoProfile -File tools/Build-KsaDevPanel.ps1 -Stage` | Compile against pinned `.5949`, StarMap 0.5.4, and Harmony 2.4.3 inputs and stage the allowlisted payload. | **Passed.** 0 warnings, 0 errors. Staged and installed DLL SHA-256 matched: `CC1A0379CDF063E54FDD614D9B56D299AE31D1C19533CFC85556FFD85856FF8C`. |
+| Deployment dry run and deployment | Resolve the isolated profile and install the staged mod. | **Passed.** The prior deployment was rolled back using the mod's deployment tool; the staged payload was then deployed to the isolated profile. The registered installation was not modified. |
+| Isolated runtime launch | Launch the pinned `.5949` development copy and show the Performance tab. | **Passed visually.** `tools/Start-IsolatedKsa.ps1` opened the window owned by `.development/runtime/dotnet.exe`. The `Performance history` view displayed the Process CPU graph with 45 samples, current/minimum/maximum values, and CPU percent over elapsed seconds. |
+| Automated tests | Run the relevant portable history/metric checks. | **Not run for this change.** |
+| Metric selection and graph behavior | Select several CPU, RAM, and GPU metrics; inspect units, gaps and rolling-window trim; return with **Back**. | **Pending.** Only the Process CPU history view was visually observed; picker interactions, other graph series, gaps, and five-minute trimming were not exercised. |
+| Hardware readings | Display real CPU/RAM/GPU identity and readings, with unavailable GPU values handled safely; compare to Task Manager. | **Pending.** The graph view ran in KSA, but hardware summary accuracy was not compared with Task Manager. GPU-engine and Vulkan video-memory reporting remain unverified. |

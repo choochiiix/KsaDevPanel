@@ -4,6 +4,7 @@ using System.IO;
 using System.Text.Json;
 using Brutal.ImGuiApi;
 using Brutal.Numerics;
+using KsaDevPanel.Performance;
 
 namespace KsaDevPanel.UI;
 
@@ -30,6 +31,7 @@ public sealed class Workbench : IDisposable
     private KsaDevPanel.Inspection.VesselSnapshotDisplay? _vesselDisplay;
     private string? _displayVesselId;
     private string _settingsStatus = "Settings are current.";
+    private string? _selectedPerformanceMetric;
     private bool _disposed;
 
     public Workbench(string settingsPath)
@@ -65,7 +67,9 @@ public sealed class Workbench : IDisposable
     /// </summary>
     public void Draw(
         KsaDevPanel.Diagnostics.SessionDiagnostics diagnostics,
-        KsaDevPanel.Inspection.VesselSnapshot? snapshot)
+        KsaDevPanel.Inspection.VesselSnapshot? snapshot,
+        PerformanceSnapshot? performanceSnapshot,
+        PerformanceHistorySnapshot? performanceHistory)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
@@ -78,7 +82,7 @@ public sealed class Workbench : IDisposable
             CaptureHotkey();
 
         if (_showWindow)
-            DrawDashboard(diagnostics, snapshot);
+            DrawDashboard(diagnostics, snapshot, performanceSnapshot, performanceHistory);
 
         if (Environment.TickCount64 >= _nextSave)
         {
@@ -97,7 +101,9 @@ public sealed class Workbench : IDisposable
 
     private void DrawDashboard(
         KsaDevPanel.Diagnostics.SessionDiagnostics diagnostics,
-        KsaDevPanel.Inspection.VesselSnapshot? snapshot)
+        KsaDevPanel.Inspection.VesselSnapshot? snapshot,
+        PerformanceSnapshot? performanceSnapshot,
+        PerformanceHistorySnapshot? performanceHistory)
     {
         if (_applyLayout)
         {
@@ -140,6 +146,14 @@ public sealed class Workbench : IDisposable
             if (ImGui.BeginTabItem("Vessel", default))
             {
                 DrawVesselInspector(snapshot);
+                ImGui.EndTabItem();
+            }
+            if (ImGui.BeginTabItem("Performance", default))
+            {
+                _selectedPerformanceMetric = PerformanceTabView.Draw(
+                    performanceSnapshot,
+                    performanceHistory,
+                    _selectedPerformanceMetric);
                 ImGui.EndTabItem();
             }
             if (ImGui.BeginTabItem("Diagnostics", default))

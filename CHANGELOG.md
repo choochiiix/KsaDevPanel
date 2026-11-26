@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added once-per-second CPU, RAM, process GPU-engine, and video-memory sampling to the Performance tab, with selectable rolling five-minute metric graphs and current/minimum/maximum summaries.
+
 ## [0.2.0-alpha.1] - 2026-11-26
 
 ### Added

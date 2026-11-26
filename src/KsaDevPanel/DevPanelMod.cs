@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Reflection;
 using KsaDevPanel.Diagnostics;
 using KsaDevPanel.Inspection;
+using KsaDevPanel.Performance;
 using KsaDevPanel.UI;
 using StarMap.API;
 
@@ -17,6 +18,7 @@ public sealed class DevPanelMod
     private readonly SessionDiagnostics diagnostics = new();
     private readonly VesselReader vesselReader = new(new KsaVesselSource());
     private Workbench? workbench;
+    private PerformanceSampler? performanceSampler;
 
     [StarMapBeforeMain]
     public void Start()
@@ -42,6 +44,7 @@ public sealed class DevPanelMod
             .InformationalVersion.Split('+', 2)[0];
         diagnostics.MarkStartup(version, GameBuild);
         workbench = new Workbench(settingsPath);
+        performanceSampler = new PerformanceSampler();
     }
 
     [StarMapAfterGui]
@@ -55,12 +58,14 @@ public sealed class DevPanelMod
             : KSA.Program.IsLoaded ? SessionScene.World : SessionScene.Loading;
         diagnostics.ObserveScene(scene);
         var snapshot = scene == SessionScene.World ? vesselReader.Read() : null;
-        workbench.Draw(diagnostics, snapshot);
+        workbench.Draw(diagnostics, snapshot, performanceSampler?.Latest, performanceSampler?.History);
     }
 
     [StarMapUnload]
     public void Unload()
     {
+        performanceSampler?.Dispose();
+        performanceSampler = null;
         workbench?.Dispose();
         workbench = null;
     }
