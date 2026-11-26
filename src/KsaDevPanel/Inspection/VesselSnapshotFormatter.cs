@@ -20,16 +20,25 @@ public static class VesselSnapshotFormatter
                 "—",
                 "—",
                 "—",
-                "—",
+                new VesselVelocityDisplay("—", "—", "—", "—", "—", "—"),
+                UnavailableMetrics,
                 EmptyStrings);
         }
 
         var velocity = snapshot.Velocity is null
-            ? "Unavailable"
-            : string.Create(
-                CultureInfo.InvariantCulture,
-                $"({snapshot.Velocity.X:0.###}, {snapshot.Velocity.Y:0.###}, {snapshot.Velocity.Z:0.###}) " +
-                $"{snapshot.Velocity.Frame ?? "frame unavailable"}, {snapshot.Velocity.Units ?? "units unavailable"}");
+            ? new VesselVelocityDisplay("Unavailable", "Unavailable", "Unavailable", "Unavailable", "unavailable", "")
+            : new VesselVelocityDisplay(
+                string.Create(CultureInfo.InvariantCulture,
+                    $"{Math.Sqrt(snapshot.Velocity.X * snapshot.Velocity.X + snapshot.Velocity.Y * snapshot.Velocity.Y + snapshot.Velocity.Z * snapshot.Velocity.Z):0.0}"),
+                FormatComponent(snapshot.Velocity.X),
+                FormatComponent(snapshot.Velocity.Y),
+                FormatComponent(snapshot.Velocity.Z),
+                snapshot.Velocity.Frame ?? "frame unavailable",
+                snapshot.Velocity.Units ?? "units unavailable");
+
+        var metrics = snapshot.Metrics is null
+            ? UnavailableMetrics
+            : FormatMetrics(snapshot.Metrics);
 
         var parts = new ReadOnlyCollection<string>(snapshot.Parts
             .Select(static p => string.IsNullOrWhiteSpace(p.PartType) ? p.Name : $"{p.Name} ({p.PartType})")
@@ -41,9 +50,61 @@ public static class VesselSnapshotFormatter
             snapshot.ParentBody ?? "Unavailable",
             snapshot.Situation ?? "Unavailable",
             velocity,
+            metrics,
             parts);
+    }
+
+    private static VesselMetricsDisplay FormatMetrics(VesselMetricsSnapshot metrics)
+    {
+        var acceleration = metrics.Acceleration;
+        var accelerationMagnitude = acceleration is null
+            ? "Unavailable"
+            : FormatWithUnits(
+                Magnitude(acceleration.X, acceleration.Y, acceleration.Z),
+                acceleration.Units ?? "native units/s²; scale unverified");
+
+        return new VesselMetricsDisplay(
+            FormatWithUnits(metrics.AltitudeKm, "km"),
+            FormatWithUnits(metrics.SurfaceSpeed, "native units/s; scale unverified"),
+            FormatWithUnits(metrics.OrbitalSpeed, "native units/s; scale unverified"),
+            accelerationMagnitude,
+            acceleration is null ? "Unavailable" : FormatComponent(acceleration.X),
+            acceleration is null ? "Unavailable" : FormatComponent(acceleration.Y),
+            acceleration is null ? "Unavailable" : FormatComponent(acceleration.Z),
+            acceleration?.Frame ?? "frame unavailable",
+            acceleration?.Units ?? "units unavailable",
+            FormatWithUnits(metrics.TotalMass, "native mass units; scale unverified"),
+            FormatWithUnits(metrics.PropellantMass, "native mass units; scale unverified"),
+            FormatNumber(metrics.ManualThrottle, "0.00"));
+    }
+
+    private static string FormatWithUnits(double? value, string units)
+    {
+        var formatted = FormatNumber(value, "0.0");
+        return formatted == "Unavailable" ? formatted : $"{formatted} {units}";
+    }
+
+    private static string FormatNumber(double? value, string format)
+    {
+        if (value is not { } number || !double.IsFinite(number))
+            return "Unavailable";
+        return number.ToString(format, CultureInfo.InvariantCulture);
+    }
+
+    private static double? Magnitude(double x, double y, double z)
+    {
+        var magnitude = Math.Sqrt(x * x + y * y + z * z);
+        return double.IsFinite(magnitude) ? magnitude : null;
     }
 
     private static readonly IReadOnlyList<string> EmptyStrings =
         new ReadOnlyCollection<string>(Array.Empty<string>());
+
+    private static readonly VesselMetricsDisplay UnavailableMetrics = new(
+        "Unavailable", "Unavailable", "Unavailable", "Unavailable",
+        "Unavailable", "Unavailable", "Unavailable", "frame unavailable",
+        "units unavailable", "Unavailable", "Unavailable", "Unavailable");
+
+    private static string FormatComponent(double value) =>
+        value.ToString("0.0", CultureInfo.InvariantCulture);
 }

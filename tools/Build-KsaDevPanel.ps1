@@ -9,10 +9,13 @@ param(
 $repo = Get-RepoRoot
 $project = Join-Path $repo 'src\KsaDevPanel\KsaDevPanel.csproj'
 if (-not (Test-Path -LiteralPath $project -PathType Leaf)) { throw "Project not found: $project" }
-$pathsFile = Join-Path (Split-Path $repo -Parent | Split-Path -Parent) 'LocalPaths.local.json'
+$workspace = Split-Path (Split-Path $repo -Parent) -Parent
+$pathsFile = Join-Path $workspace 'LocalPaths.local.json'
 if (-not (Test-Path -LiteralPath $pathsFile -PathType Leaf)) { throw "Missing ignored local path file: $pathsFile" }
 $paths = Get-Content -LiteralPath $pathsFile -Raw | ConvertFrom-Json
-$game = Resolve-ExistingAbsolutePath $paths.referenceGameDirectory 'referenceGameDirectory'
+$game = Join-Path $workspace '.development\game'
+if (-not (Test-Path -LiteralPath $game -PathType Container)) { throw 'Shared development game copy is missing.' }
+$game = Resolve-ExistingAbsolutePath $game 'shared development game'
 $dll = Join-Path $game 'KSA.dll'
 $version = (Get-Item -LiteralPath $dll).VersionInfo.FileVersion
 if ($version -ne '2026.11.25.5949' -or

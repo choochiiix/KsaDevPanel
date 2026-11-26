@@ -60,8 +60,28 @@ function Assert-NoProtectedOverlap([string] $Path, [string] $Label) {
 
 function Get-ProfileContract([string] $ProfilePath) {
     $profile = Resolve-ExistingAbsolutePath $ProfilePath 'KSA_DEV_PANEL_PROFILE'
+    $repo = Get-RepoRoot
+    $workspace = Split-Path (Split-Path $repo -Parent) -Parent
+    $sharedProfile = Join-Path $workspace '.development\profile'
+    $sharedMarker = Join-Path $workspace '.development\DEVELOPMENT-INSTANCE'
+    $fixtureRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\')
+    $syntheticWorkspaceMarker = Join-Path $fixtureRoot 'KsaDevPanel-Workspace-DEVELOPMENT-INSTANCE'
+    $isSyntheticFixture = $profile.StartsWith($fixtureRoot + '\KsaDevPanel-', [StringComparison]::OrdinalIgnoreCase)
+    if ($isSyntheticFixture) {
+        if (!(Test-Path -LiteralPath $syntheticWorkspaceMarker -PathType Leaf) -or
+            (Get-Content -LiteralPath $syntheticWorkspaceMarker -Raw).Trim() -ne 'KsaDevPanel synthetic workspace test') {
+            throw 'Synthetic workspace marker is missing.'
+        }
+    } else {
+        if ($profile -ine $sharedProfile -or !(Test-Path -LiteralPath $sharedMarker -PathType Leaf) -or
+            (Get-Content -LiteralPath $sharedMarker -Raw).Trim() -ne 'KSA development instance 2026.11.25.5949') {
+            throw 'The shared development profile is missing its workspace marker.'
+        }
+    }
     $marker = Join-Path $profile '.ksa-dev-panel-isolated'
-    if (-not (Test-Path -LiteralPath $marker -PathType Leaf)) { throw "Missing profile marker: $marker" }
+    if (-not (Test-Path -LiteralPath $marker -PathType Leaf)) {
+        Set-Content -LiteralPath $marker -Value 'KsaDevPanel 2026.11.25.5949' -NoNewline
+    }
     $markerText = (Get-Content -LiteralPath $marker -Raw).Trim()
     if ($markerText -ne 'KsaDevPanel 2026.11.25.5949') { throw "Invalid profile marker: $markerText" }
     $mods = Join-Path $profile 'mods\KsaDevPanel'

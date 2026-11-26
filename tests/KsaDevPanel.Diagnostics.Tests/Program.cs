@@ -47,13 +47,13 @@ static void StartupIsSingleMarker()
     var diagnostics = new SessionDiagnostics();
     var output = CaptureStdout(() =>
     {
-        diagnostics.MarkStartup("0.1.0-alpha.1", "2026.11.25.5949");
+        diagnostics.MarkStartup("0.2.0-alpha.1", "2026.11.25.5949");
         diagnostics.MarkStartup("ignored", "ignored");
     });
 
-    var expected = $"[KsaDevPanel] startup version=0.1.0-alpha.1 build=2026.11.25.5949 run={diagnostics.RunId}{Environment.NewLine}";
+    var expected = $"[KsaDevPanel] startup version=0.2.0-alpha.1 build=2026.11.25.5949 run={diagnostics.RunId}{Environment.NewLine}";
     Assert(output == expected, "startup must emit exactly one marker line");
-    Assert(diagnostics.CopySummary().Contains("version=0.1.0-alpha.1 build=2026.11.25.5949", StringComparison.Ordinal), "summary must retain the first startup identity");
+    Assert(diagnostics.CopySummary().Contains("version=0.2.0-alpha.1 build=2026.11.25.5949", StringComparison.Ordinal), "summary must retain the first startup identity");
 }
 
 static void StartupValuesAreSafe()

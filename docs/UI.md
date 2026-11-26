@@ -31,14 +31,20 @@ the renderer.
 
 ## Dashboard behavior
 
-The dark dashboard has two read-only cards:
+The dark dashboard has three tabs:
 
-- **Runtime Console** shows the run ID, bounded diagnostics summary, and a
-  clipboard copy button. Copying remains an explicit UI action; diagnostics
-  itself never accesses the clipboard.
-- **Vessel Inspector** shows availability, identity, body, situation, velocity,
-  and part names from the immutable display contract. Startup, world transition,
-  and no-active-vessel snapshots remain visible as an unavailable state.
+- **Vessel** groups altitude, surface/orbital speed, ECL speed and acceleration
+  under flight and motion sections. Total mass, propellant mass and manual
+  throttle have their own section. Expand the ECL or body-relative rows to see
+  vector components, or expand the part list for craft details. Values refresh
+  five times a second. Altitude is in km; other physical scales and the throttle
+  range remain unverified. ECL is the game's root inertial frame.
+- **Diagnostics** shows the run ID and bounded lifecycle summary. Copying stays
+  an explicit UI action; diagnostics itself never accesses the clipboard.
+- **Settings & Refresh** groups the shortcut controls, live settings refresh,
+  and the restart requirement for code changes.
+
+Older saved layouts migrate to a larger 1040×700 workbench window.
 
 The default toggle is **F12**. Its full stock conflict map is pending. A hotkey
 can be changed to F1–F24 and is saved in the isolated JSON file. Escape cancels
@@ -53,8 +59,9 @@ also flush the current settings. File failures leave the panel usable in memory.
 ## Manual UI checks (authorized isolated profile only)
 
 Use a disposable profile and record the executable identity before testing
-(workspace build baseline L-01). See [Verification](Verification.md) for the
-observed configuration-screen behavior and pending gameplay checks.
+(workspace build baseline L-01). The workbench and live telemetry have been
+visually observed in one active-world scenario; see [Verification](Verification.md)
+for the measured values and remaining acceptance checks.
 
 1. In a gameplay or editor draw context without an active vessel, verify the
    panel opens and reports unavailable vessel state.
@@ -77,11 +84,13 @@ observed configuration-screen behavior and pending gameplay checks.
 | Check | Expected | Actual | Game ran |
 | --- | --- | --- | --- |
 | Local `Brutal.ImGui.dll` compile check | `ImGui.Begin/End`, `GetIO`, `IsKeyPressed`, window position and size calls, F1–F24 | Compiled against the `.5949` reference copy | No |
+| Pinned tab layout and vessel details | `BeginTabBar`, `BeginTabItem`, row-background detail table and expandable part list | Compiled against the pinned `.5949` ImGui wrapper | No |
 | Source/build contract | `Workbench(string)`, `Draw(SessionDiagnostics, VesselSnapshot?)`, `IDisposable` | Implemented in `src/KsaDevPanel/UI/Workbench.cs` | No |
 | Settings safety | Relative/blank path rejected; no profile fallback | Enforced by constructor | No |
-| Runtime UI | Frame callback, scene/input/layout behavior | Initial configuration did not show the panel after F12. Gameplay checks pending. | Yes |
+| Runtime UI | Frame callback, scene/input/layout behavior | Workbench and live vessel data were visible in a loaded .5949 test world; F12 opened it from a saved-hidden state. Cross-scene, hotkey conflict and restart persistence checks remain open. | Yes |
 
-Open gaps remain the actual StarMap GUI callback invocation and stock hotkey
-conflict map. Community UI examples establish the ImGui/capture pattern but do
-not replace a `.5949` runtime smoke test (M-07, see workspace
+Open gaps remain callback behavior across editor and transition scenes, the stock
+hotkey conflict map, vessel switching and restart persistence. Community UI
+examples establish the ImGui/capture pattern but do not replace those
+`.5949` acceptance checks (M-07, see workspace
 `Documentation/Research/OpenQuestions.md`).

@@ -6,7 +6,10 @@ $fixture = Join-Path ([IO.Path]::GetTempPath()) ('KsaDevPanel-inspection-' + [Gu
 $profile = Join-Path $fixture 'profile'
 $payload = Join-Path $fixture 'payload'
 $log = Join-Path $fixture 'run.log'
+$workspaceMarker = Join-Path ([IO.Path]::GetTempPath()) 'KsaDevPanel-Workspace-DEVELOPMENT-INSTANCE'
+if (Test-Path $workspaceMarker) { throw 'Synthetic workspace marker already exists.' }
 try {
+    Set-Content -LiteralPath $workspaceMarker -Value 'KsaDevPanel synthetic workspace test' -NoNewline
     New-Item -ItemType Directory -Path (Join-Path $profile 'mods\KsaDevPanel') -Force | Out-Null
     New-Item -ItemType Directory -Path $profile -Force | Out-Null
     New-Item -ItemType Directory -Path $payload -Force | Out-Null
@@ -14,6 +17,7 @@ try {
     Set-Content -LiteralPath (Join-Path $profile 'KsaDevPanel.settings.json') -Value '{}'
     $manifest = Join-Path $profile 'manifest.toml'
     Set-Content -LiteralPath $manifest -Value "[[mods]]`nid = 'Core'`nenabled = true"
+    Add-Content -LiteralPath $manifest -Value "`n[[mods]]`nid = `"OtherDevMod`"`nenabled = true"
     $manifestHashBefore = (Get-FileHash -LiteralPath $manifest -Algorithm SHA256).Hash
     Set-Content -LiteralPath (Join-Path $profile 'mods\KsaDevPanel\prior.txt') -Value 'prior'
     Set-Content -LiteralPath (Join-Path $payload 'KsaDevPanel.dll') -Value 'synthetic'
@@ -29,7 +33,8 @@ try {
     & (Join-Path $PSScriptRoot 'Deploy-KsaDevPanel.ps1') -Profile $profile -Rollback -DryRun -ApplySynthetic | Out-Null
     & (Join-Path $PSScriptRoot 'Deploy-KsaDevPanel.ps1') -Profile $profile -Payload $payload -ApplySynthetic | Out-Null
     if (-not (Test-Path -LiteralPath (Join-Path $profile 'mods\KsaDevPanel\KsaDevPanel.dll') -PathType Leaf)) { throw 'Synthetic deploy assertion failed' }
-    if ((Get-Content -LiteralPath $manifest -Raw) -notmatch 'id = "KsaDevPanel"') { throw 'Deployment did not enable the manifest entry' }
+    $deployedManifest = Get-Content -LiteralPath $manifest -Raw
+    if ($deployedManifest -notmatch 'id = "KsaDevPanel"' -or $deployedManifest -notmatch 'OtherDevMod') { throw 'Deployment did not preserve existing mod entries' }
     & (Join-Path $PSScriptRoot 'Deploy-KsaDevPanel.ps1') -Profile $profile -Rollback -ApplySynthetic | Out-Null
     if (-not (Test-Path -LiteralPath (Join-Path $profile 'mods\KsaDevPanel\prior.txt') -PathType Leaf)) { throw 'Synthetic rollback assertion failed' }
     $manifestHashAfter = (Get-FileHash -LiteralPath $manifest -Algorithm SHA256).Hash
@@ -59,4 +64,5 @@ finally {
     }
     Remove-Item Env:KSA_DEV_PANEL_PROFILE -ErrorAction SilentlyContinue
     Remove-Item Env:STARMAP_INSTANCE_PATH -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $workspaceMarker -Force -ErrorAction SilentlyContinue
 }

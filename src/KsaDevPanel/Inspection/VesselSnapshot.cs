@@ -21,10 +21,24 @@ public sealed record VesselReadData(
     string? ParentBody,
     string? Situation,
     VelocityReadData? Velocity,
-    IReadOnlyList<PartReadData>? Parts);
+    IReadOnlyList<PartReadData>? Parts,
+    VesselMetricsReadData? Metrics = null);
 
 /// <summary>Primitive velocity data; no game vector or frame object is retained.</summary>
 public sealed record VelocityReadData(double X, double Y, double Z, string? Frame, string? Units);
+
+/// <summary>Primitive values copied from the active vehicle during one host draw.</summary>
+public sealed record VesselMetricsReadData(
+    double? AltitudeKm,
+    double? SurfaceSpeed,
+    double? OrbitalSpeed,
+    AccelerationReadData? Acceleration,
+    double? TotalMass,
+    double? PropellantMass,
+    double? ManualThrottle);
+
+/// <summary>Primitive acceleration vector; no game vector or frame object is retained.</summary>
+public sealed record AccelerationReadData(double X, double Y, double Z, string? Frame, string? Units);
 
 /// <summary>Primitive part identity copied from a host-owned part tree.</summary>
 public sealed record PartReadData(string Name, string? PartType = null);
@@ -42,6 +56,7 @@ public sealed class VesselSnapshot
         string? parentBody,
         string? situation,
         VelocitySnapshot? velocity,
+        VesselMetricsSnapshot? metrics,
         IReadOnlyList<PartSnapshot> parts,
         string? reason)
     {
@@ -51,6 +66,7 @@ public sealed class VesselSnapshot
         ParentBody = parentBody;
         Situation = situation;
         Velocity = velocity;
+        Metrics = metrics;
         Parts = parts;
         Reason = reason;
     }
@@ -61,6 +77,7 @@ public sealed class VesselSnapshot
     public string? ParentBody { get; }
     public string? Situation { get; }
     public VelocitySnapshot? Velocity { get; }
+    public VesselMetricsSnapshot? Metrics { get; }
     public IReadOnlyList<PartSnapshot> Parts { get; }
     public string? Reason { get; }
 
@@ -70,6 +87,7 @@ public sealed class VesselSnapshot
         VesselSnapshotAvailability availability,
         string? reason = null) => new(
             availability,
+            null,
             null,
             null,
             null,
@@ -99,6 +117,24 @@ public sealed class VesselSnapshot
                 CleanOptional(data.Velocity.Frame),
                 CleanOptional(data.Velocity.Units));
 
+        var metrics = data.Metrics is null
+            ? null
+            : new VesselMetricsSnapshot(
+                data.Metrics.AltitudeKm,
+                data.Metrics.SurfaceSpeed,
+                data.Metrics.OrbitalSpeed,
+                data.Metrics.Acceleration is null
+                    ? null
+                    : new AccelerationSnapshot(
+                        data.Metrics.Acceleration.X,
+                        data.Metrics.Acceleration.Y,
+                        data.Metrics.Acceleration.Z,
+                        CleanOptional(data.Metrics.Acceleration.Frame),
+                        CleanOptional(data.Metrics.Acceleration.Units)),
+                data.Metrics.TotalMass,
+                data.Metrics.PropellantMass,
+                data.Metrics.ManualThrottle);
+
         return new VesselSnapshot(
             VesselSnapshotAvailability.Available,
             id,
@@ -106,6 +142,7 @@ public sealed class VesselSnapshot
             CleanOptional(data.ParentBody),
             CleanOptional(data.Situation),
             velocity,
+            metrics,
             parts,
             null);
     }
@@ -127,7 +164,45 @@ public sealed record VelocitySnapshot(
     string? Frame,
     string? Units);
 
+public sealed record VesselMetricsSnapshot(
+    double? AltitudeKm,
+    double? SurfaceSpeed,
+    double? OrbitalSpeed,
+    AccelerationSnapshot? Acceleration,
+    double? TotalMass,
+    double? PropellantMass,
+    double? ManualThrottle);
+
+public sealed record AccelerationSnapshot(
+    double X,
+    double Y,
+    double Z,
+    string? Frame,
+    string? Units);
+
 public sealed record PartSnapshot(string Name, string? PartType);
+
+public sealed record VesselVelocityDisplay(
+    string Speed,
+    string X,
+    string Y,
+    string Z,
+    string Frame,
+    string Units);
+
+public sealed record VesselMetricsDisplay(
+    string Altitude,
+    string SurfaceSpeed,
+    string OrbitalSpeed,
+    string AccelerationMagnitude,
+    string AccelerationX,
+    string AccelerationY,
+    string AccelerationZ,
+    string AccelerationFrame,
+    string AccelerationUnits,
+    string TotalMass,
+    string PropellantMass,
+    string ManualThrottle);
 
 /// <summary>Immutable text values ready for a UI renderer.</summary>
 public sealed class VesselSnapshotDisplay
@@ -137,7 +212,8 @@ public sealed class VesselSnapshotDisplay
         string identity,
         string parentBody,
         string situation,
-        string velocity,
+        VesselVelocityDisplay velocity,
+        VesselMetricsDisplay metrics,
         IReadOnlyList<string> parts)
     {
         Status = status;
@@ -145,6 +221,7 @@ public sealed class VesselSnapshotDisplay
         ParentBody = parentBody;
         Situation = situation;
         Velocity = velocity;
+        Metrics = metrics;
         Parts = parts;
     }
 
@@ -152,6 +229,7 @@ public sealed class VesselSnapshotDisplay
     public string Identity { get; }
     public string ParentBody { get; }
     public string Situation { get; }
-    public string Velocity { get; }
+    public VesselVelocityDisplay Velocity { get; }
+    public VesselMetricsDisplay Metrics { get; }
     public IReadOnlyList<string> Parts { get; }
 }

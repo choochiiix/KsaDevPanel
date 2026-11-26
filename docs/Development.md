@@ -13,23 +13,23 @@ pwsh -NoProfile -File tools/Build-KsaDevPanel.ps1 -Stage
 
 The build uses offline restore with the checked-in package-source configuration. The stage command prints an ignored `.artifacts/stage-*/` directory containing only the mod DLL, dependency manifest, and descriptor. The loader supplies StarMap.API and Harmony. The game supplies KSA and BRUTAL assemblies.
 
-## Create an isolated instance
+## Shared development instance
 
-Keep the disposable game copy at `.local/game/` and its profile at `.local/profile/`. Use a regular directory for each and copy only the desired pinned game distribution. Inside the profile, create a text file named `.ksa-dev-panel-isolated` containing `KsaDevPanel 2026.11.25.5949`.
+Use one development install for all mods. The shared setup lives in the workspace root under `.development/game/`, `.development/loader/`, `.development/runtime/`, and `.development/profile/`. For a game update, stage a new version separately, verify it, and keep the last working copy until the update passes its smoke checks. Treat the registered installation and its saves as read-only.
 
-Create `.local/starmap/StarMapConfig.json` with `GameLocation` set to the absolute path to the disposable `KSA.dll`, `GameArguments` set to an empty array, and `RepositoryLocation` set to an empty string. Preview the launch and then run the Core-only baseline to initialize the profile.
+The shared loader configuration lives at `.development/loader/StarMapConfig.json`. The launcher passes the development game, shared profile, and loader config explicitly. It checks the build fingerprints and creates a fresh profile marker. Launch once to initialize the profile, then reuse that copy across independent mod repositories.
 
 ```powershell
 pwsh -NoProfile -File tools/Start-IsolatedKsa.ps1 -DryRun
 pwsh -NoProfile -File tools/Start-IsolatedKsa.ps1
 ```
 
-Close the game before staging changes to that profile. Subsequent launches through this script share an exclusive lock with deployment. The launcher sets `STARMAP_INSTANCE_PATH` and `KSA_DEV_PANEL_PROFILE` for the child. It saves stdout and stderr under `.local/`.
+Close the game before staging changes to the profile. Launch and deployment share an exclusive lock. The launcher passes the isolated documents path on StarMap's command line and captures logs beneath `.development/`.
 
 ## Deploy and roll back
 
 ```powershell
-$env:KSA_DEV_PANEL_PROFILE = (Resolve-Path .local/profile).Path
+$env:KSA_DEV_PANEL_PROFILE = (Resolve-Path ..\..\.development\profile).Path
 $env:STARMAP_INSTANCE_PATH = $env:KSA_DEV_PANEL_PROFILE
 $stage = (Get-ChildItem .artifacts -Directory -Filter 'stage-*' |
     Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1).FullName
@@ -39,13 +39,13 @@ pwsh -NoProfile -File tools/Deploy-KsaDevPanel.ps1 -Profile $env:KSA_DEV_PANEL_P
 pwsh -NoProfile -File tools/Start-IsolatedKsa.ps1
 ```
 
-The tool checks the profile, actual game build, loader directory, and staged file list before taking the lock or writing. It backs up the previous mod folder and manifest before applying the staged files and enabling the mod. After closing the game, roll back with:
+The tool checks the profile, shared game build and loader pins, and staged file list before taking the lock or writing. The backup stores the prior KsaDevPanel directory and manifest entry. Rollback removes only this mod's enabled entry and restores its previous entry, preserving other mod entries and folders. After closing the game, roll back with:
 
 ```powershell
 pwsh -NoProfile -File tools/Deploy-KsaDevPanel.ps1 -Profile $env:KSA_DEV_PANEL_PROFILE -Rollback
 ```
 
-Rollback restores the prior manifest bytes and mod folder. The backup is retained under a `.restored-*` name for recovery. A deployment with an existing rollback backup stops until that deployment is rolled back.
+Rollback restores the prior mod folder and cleans up its transaction lock. A deployment with an existing rollback backup stops until that deployment is rolled back.
 
 ## Check a run
 
@@ -56,3 +56,7 @@ pwsh -NoProfile -File tools/Test-InspectionTools.ps1
 ```
 
 Use `tools/Get-BoundedLog.ps1 -Log <isolated-log-path> -MaxLines 120` to check the last 120 lines, optionally filtered by run ID. Match markers with the fresh launch log. See [Testing](Testing.md) for the game scenarios and [Verification](Verification.md) for results.
+
+## Share the instance with another mod
+
+Each mod project keeps its own source, build output, and deployment rollback folder. To connect another mod, point its compile references at the same `.development/game/`, use the shared StarMap loader under `.development/loader/`, and use `.development/profile/` with the same marker and command line shown above. Give the mod its own folder below `profile/mods/` and its own `profile/mod-rollbacks/<ModId>/` backup. Deployment must preserve the other manifest entries and hold the shared profile lock.

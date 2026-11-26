@@ -10,9 +10,19 @@ param(
 . (Join-Path $PSScriptRoot 'KsaDevPanel.Common.ps1')
 $contract = Assert-ProfileEnvironment $Profile
 $repo = Get-RepoRoot
+$workspace = Split-Path (Split-Path $repo -Parent) -Parent
+$pinnedGame = Join-Path $workspace '.development\game'
+$pinnedLoader = Join-Path $workspace '.development\loader'
+if (!(Test-Path -LiteralPath $pinnedGame -PathType Container) -or
+    (Get-Item (Join-Path $pinnedGame 'KSA.dll')).VersionInfo.FileVersion -ne '2026.11.25.5949' -or
+    (Get-FileHash (Join-Path $pinnedGame 'KSA.dll')).Hash -ine 'FA741419E287FB7F673FBA3212BE622B5FC27DB91FA4A6632828FB9DA7B15C7E' -or
+    (Get-Item (Join-Path $pinnedLoader 'StarMap.dll')).VersionInfo.ProductVersion -ne '0.5.4+477f495d1c8d59910ad7f37071b77535f59f8c5d') {
+    throw 'Shared development game or StarMap build does not match the pinned inputs.'
+}
 $target = $contract.Mods
 $manifest = Join-Path $contract.Profile 'manifest.toml'
-$backup = Join-Path $contract.Profile '.ksa-dev-panel-rollback'
+$rollbackRoot = Join-Path $contract.Profile 'mod-rollbacks'
+$backup = Join-Path $rollbackRoot 'KsaDevPanel'
 $marker = if ($ApplySynthetic) { 'synthetic' } else { 'disposable' }
 
 if ($ApplySynthetic) {
@@ -21,8 +31,8 @@ if ($ApplySynthetic) {
         throw 'The synthetic profile must be below the OS temporary directory.'
     }
 } else {
-    $expectedProfile = Join-Path $repo '.local\profile'
-    if ($contract.Profile -ine $expectedProfile) { throw 'Deploy to the dedicated .local/profile directory.' }
+    $expectedProfile = Join-Path (Split-Path (Split-Path $repo -Parent) -Parent) '.development\profile'
+    if ($contract.Profile -ine $expectedProfile) { throw 'Deploy to the shared workspace development profile.' }
     & (Join-Path $PSScriptRoot 'Start-IsolatedKsa.ps1') -DryRun | Out-Null
 }
 
@@ -64,14 +74,23 @@ try {
         $retired = $backup + '.restored-' + [guid]::NewGuid().ToString('N')
         $discard = Join-Path $backup ('discard-' + [guid]::NewGuid().ToString('N'))
         $previous = Join-Path $backup 'previous'
-        $manifestCopy = Join-Path $backup 'manifest.restore'
-        Copy-Item -LiteralPath (Join-Path $backup 'manifest.before') -Destination $manifestCopy -Force
+        $withoutEntry = Join-Path $backup 'manifest.without-entry'
+        $priorEntry = [IO.File]::ReadAllText((Join-Path $backup 'manifest.entry.before'))
+        $currentManifest = [IO.File]::ReadAllText($manifest)
+        $currentEntry = [regex]::Match($currentManifest, '(?ms)^\[\[mods\]\][ \t]*\r?\nid[ \t]*=[ \t]*"KsaDevPanel"[ \t]*\r?\nenabled[ \t]*=[ \t]*true[ \t]*\r?\n?')
+        if (!$currentEntry.Success) { throw 'The KsaDevPanel manifest entry was changed after deployment.' }
+        $nextManifest = [regex]::Replace($currentManifest, '(?ms)^\[\[mods\]\][ \t]*\r?\nid[ \t]*=[ \t]*"KsaDevPanel"[ \t]*\r?\nenabled[ \t]*=[ \t]*true[ \t]*\r?\n?', '', 1)
+        if ($priorEntry) {
+            if ($nextManifest -and !$nextManifest.EndsWith("`n") -and !$nextManifest.EndsWith("`r")) { $nextManifest += "`r`n" }
+            $nextManifest += $priorEntry
+        }
+        [IO.File]::WriteAllText($withoutEntry + '.restore', $nextManifest)
         if (Test-Path -LiteralPath $target) { [IO.Directory]::Move($target, $discard) }
         try {
             if (Test-Path -LiteralPath $previous) {
                 Copy-Item -LiteralPath $previous -Destination $target -Recurse
             }
-            [IO.File]::Move($manifestCopy, $manifest, $true)
+            [IO.File]::Move($withoutEntry + '.restore', $manifest, $true)
         }
         catch {
             if (Test-Path -LiteralPath $target) {
@@ -80,7 +99,10 @@ try {
             if (Test-Path -LiteralPath $discard) { [IO.Directory]::Move($discard, $target) }
             throw
         }
-        [IO.Directory]::Move($backup, $retired)
+        if (Test-Path -LiteralPath $discard) {
+            Move-Item -LiteralPath $discard -Destination (Join-Path $rollbackRoot ('KsaDevPanel.replaced-' + [guid]::NewGuid().ToString('N')))
+        }
+        Remove-Item -LiteralPath $backup -Recurse -Force
     } else {
         if (Test-Path -LiteralPath $backup) { throw 'Rollback the previous deployment before applying another.' }
         $text = [IO.File]::ReadAllText($manifest)
@@ -90,6 +112,7 @@ try {
             throw 'The isolated manifest already mentions this mod. Resolve that entry before deployment.'
         }
 
+        New-Item -ItemType Directory -Path $rollbackRoot -Force | Out-Null
         $pending = $backup + '.pending-' + [guid]::NewGuid().ToString('N')
         $stage = Join-Path $pending 'stage'
         New-Item -ItemType Directory -Path $stage -Force | Out-Null
@@ -97,9 +120,22 @@ try {
         Copy-Item -LiteralPath $manifest -Destination (Join-Path $pending 'manifest.before')
         if (Test-Path -LiteralPath $target) { Copy-Item -LiteralPath $target -Destination (Join-Path $pending 'previous') -Recurse }
         [IO.File]::WriteAllText((Join-Path $pending 'origin'), $marker)
+        $oldEntryPattern = '(?ms)^\[\[mods\]\][ \t]*\r?\nid[ \t]*=[ \t]*"KsaDevPanel"[ \t]*\r?\nenabled[ \t]*=[ \t]*(?:true|false)[ \t]*\r?\n?'
+        $oldEntry = [regex]::Match($text, $oldEntryPattern)
+        if ($oldEntry.Success) {
+            [IO.File]::WriteAllText((Join-Path $pending 'manifest.entry.before'), $oldEntry.Value)
+            [IO.File]::WriteAllText((Join-Path $pending 'manifest.without-entry'), [regex]::Replace($text, $oldEntryPattern, '', 1))
+        } else {
+            [IO.File]::WriteAllText((Join-Path $pending 'manifest.entry.before'), '')
+            [IO.File]::WriteAllText((Join-Path $pending 'manifest.without-entry'), $text)
+        }
         $newManifest = Join-Path $pending 'manifest.after'
-        Copy-Item -LiteralPath $manifest -Destination $newManifest
-        if ($text -cnotmatch $enabled) { [IO.File]::AppendAllText($newManifest, "`n$entry") }
+        $baseManifest = [IO.File]::ReadAllText((Join-Path $pending 'manifest.without-entry'))
+        if ($baseManifest -and !$baseManifest.EndsWith("`n") -and !$baseManifest.EndsWith("`r")) {
+            $baseManifest += "`r`n"
+        }
+        if ($text -cnotmatch $enabled) { $baseManifest += $entry }
+        [IO.File]::WriteAllText($newManifest, $baseManifest)
         [IO.Directory]::Move($pending, $backup)
         $discard = Join-Path $backup 'replaced'
         if (Test-Path -LiteralPath $target) { [IO.Directory]::Move($target, $discard) }

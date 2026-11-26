@@ -21,6 +21,15 @@ public sealed class KsaVesselSource : IVesselSource
         var partTree = vehicle.Parts;
         var id = vehicle.Id.ToString() ?? "controlled-vessel";
         var parent = vehicle.Parent;
+        var velocity = vehicle.GetVelocityEcl();
+        var metrics = new VesselMetricsReadData(
+            TryReadScalar(() => Program.CurrentAltitudeKm),
+            TryReadScalar(vehicle.GetSurfaceSpeed),
+            TryReadScalar(() => vehicle.OrbitalSpeed),
+            TryReadAcceleration(vehicle),
+            TryReadScalar(() => vehicle.TotalMass),
+            TryReadScalar(() => vehicle.PropellantMass),
+            TryReadScalar(() => vehicle.GetManualThrottle()));
         var parts = new List<PartReadData>();
         if (partTree is not null)
         {
@@ -34,10 +43,54 @@ public sealed class KsaVesselSource : IVesselSource
 
         return new VesselReadData(
             id,
-            "Controlled vessel",
+            id,
             parent?.Id.ToString(),
             vehicle.Situation.ToString(),
-            Velocity: null,
-            Parts: parts);
+            new VelocityReadData(
+                velocity.X,
+                velocity.Y,
+                velocity.Z,
+                Frame: "ECL",
+                Units: "native units/s; scale unverified"),
+            Parts: parts,
+            Metrics: metrics);
     }
+
+    private static double? TryReadScalar(Func<double> read)
+    {
+        try
+        {
+            var value = read();
+            return double.IsFinite(value) ? value : null;
+        }
+        catch (Exception exception) when (IsTransientReadFailure(exception))
+        {
+            return null;
+        }
+    }
+
+    private static AccelerationReadData? TryReadAcceleration(Vehicle vehicle)
+    {
+        try
+        {
+            var acceleration = vehicle.AccelerationBody;
+            if (!double.IsFinite(acceleration.X) ||
+                !double.IsFinite(acceleration.Y) ||
+                !double.IsFinite(acceleration.Z))
+                return null;
+            return new AccelerationReadData(
+                acceleration.X,
+                acceleration.Y,
+                acceleration.Z,
+                Frame: "body-relative",
+                Units: "native units/s²; scale unverified");
+        }
+        catch (Exception exception) when (IsTransientReadFailure(exception))
+        {
+            return null;
+        }
+    }
+
+    private static bool IsTransientReadFailure(Exception exception) =>
+        exception is InvalidOperationException or ObjectDisposedException or NullReferenceException;
 }

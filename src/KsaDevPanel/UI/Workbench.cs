@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using Brutal.ImGuiApi;
@@ -13,7 +14,7 @@ namespace KsaDevPanel.UI;
 /// </summary>
 public sealed class Workbench : IDisposable
 {
-    private const string WindowId = "KSA Dev Panel###KsaDevPanel";
+    private const string WindowId = "KSA Developer Workbench###KsaDevPanel";
     private const ImGuiKey DefaultHotkey = ImGuiKey.F12;
 
     private readonly string _settingsPath;
@@ -23,6 +24,12 @@ public sealed class Workbench : IDisposable
     private bool _captureHotkey;
     private bool _applyLayout = true;
     private long _nextSave;
+    private long _lastSettingsWrite;
+    private long _lastObservedWrite;
+    private long _nextVesselDisplayUpdate;
+    private KsaDevPanel.Inspection.VesselSnapshotDisplay? _vesselDisplay;
+    private string? _displayVesselId;
+    private string _settingsStatus = "Settings are current.";
     private bool _disposed;
 
     public Workbench(string settingsPath)
@@ -38,10 +45,18 @@ public sealed class Workbench : IDisposable
             throw new ArgumentException("The settings path must include an isolated directory.", nameof(settingsPath));
 
         Directory.CreateDirectory(directory);
+        var settingsExisted = File.Exists(_settingsPath);
         _settings = ReadSettings(_settingsPath);
         _settings.Normalize();
         _savedSettings = _settings with { };
+        _lastSettingsWrite = LastWriteTicks(_settingsPath);
+        _lastObservedWrite = _lastSettingsWrite;
         _showWindow = _settings.Visible;
+        if (!settingsExisted)
+        {
+            _savedSettings = null;
+            Persist();
+        }
     }
 
     /// <summary>
@@ -55,6 +70,7 @@ public sealed class Workbench : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
 
         var io = ImGui.GetIO();
+        RefreshChangedSettings();
         if (!_captureHotkey && !io.WantTextInput && !ImGui.IsAnyItemActive() && ImGui.IsKeyPressed(_settings.Hotkey, false))
             _showWindow = !_showWindow;
 
@@ -87,8 +103,8 @@ public sealed class Workbench : IDisposable
         {
             _applyLayout = false;
             var display = ImGui.GetIO().DisplaySize;
-            var width = Math.Clamp(_settings.Width, 320, Math.Max(320, display.X));
-            var height = Math.Clamp(_settings.Height, 240, Math.Max(240, display.Y));
+            var width = Math.Clamp(_settings.Width, 640, Math.Max(640, display.X));
+            var height = Math.Clamp(_settings.Height, 420, Math.Max(420, display.Y));
             var position = new float2(
                 Math.Clamp(_settings.X, 0, Math.Max(0, display.X - width)),
                 Math.Clamp(_settings.Y, 0, Math.Max(0, display.Y - height)));
@@ -115,63 +131,152 @@ public sealed class Workbench : IDisposable
         _settings.Width = sizeNow.X;
         _settings.Height = sizeNow.Y;
 
-        ImGui.Text(snapshot?.IsAvailable == true ? "Active vessel available" : "Active vessel unavailable");
+        ImGui.TextDisabled("KSA DEVELOPER WORKBENCH");
+        ImGui.TextWrapped($"Run {diagnostics?.RunId ?? "unavailable"}");
         ImGui.Separator();
 
-        float2? tableSize = null;
-        if (ImGui.BeginTable("KsaDevPanelCards", 2, ImGuiTableFlags.BordersInnerV, in tableSize, 0f))
+        if (ImGui.BeginTabBar("KsaDevPanelTabs", default))
         {
-            ImGui.TableNextColumn();
-            DrawRuntimeConsole(diagnostics);
-            ImGui.TableNextColumn();
-            DrawVesselInspector(snapshot);
-            ImGui.EndTable();
+            if (ImGui.BeginTabItem("Vessel", default))
+            {
+                DrawVesselInspector(snapshot);
+                ImGui.EndTabItem();
+            }
+            if (ImGui.BeginTabItem("Diagnostics", default))
+            {
+                DrawRuntimeConsole(diagnostics);
+                ImGui.EndTabItem();
+            }
+            if (ImGui.BeginTabItem("Settings & Refresh", default))
+            {
+                DrawSettingsCard();
+                DrawRefreshCard();
+                ImGui.EndTabItem();
+            }
+            ImGui.EndTabBar();
         }
-
-        ImGui.Separator();
-        DrawSettingsCard();
         ImGui.End();
     }
 
-    private static void DrawRuntimeConsole(KsaDevPanel.Diagnostics.SessionDiagnostics diagnostics)
+    private static void DrawRuntimeConsole(KsaDevPanel.Diagnostics.SessionDiagnostics? diagnostics)
     {
-        ImGui.SeparatorText("Runtime Console");
-        ImGui.Text("Session");
-        ImGui.SameLine();
-        ImGui.Text(diagnostics?.RunId ?? "unavailable");
-
+        ImGui.SeparatorText("Session diagnostics");
         var summary = SafeSummary(diagnostics);
         ImGui.TextWrapped(summary);
         if (ImGui.SmallButton("Copy diagnostics"))
             ImGui.SetClipboardText(summary);
     }
 
-    private static void DrawVesselInspector(KsaDevPanel.Inspection.VesselSnapshot? snapshot)
+    private void DrawVesselInspector(KsaDevPanel.Inspection.VesselSnapshot? snapshot)
     {
-        ImGui.SeparatorText("Vessel Inspector");
+        ImGui.SeparatorText("Active vessel");
         if (snapshot is null)
         {
+            _displayVesselId = null;
+            _vesselDisplay = null;
             ImGui.TextDisabled("No vessel snapshot available.");
-            ImGui.TextWrapped("The world or active vessel is not ready. The panel remains available for startup and scene transitions.");
+            ImGui.TextWrapped("The world or active vessel is not ready. This readout updates from the current frame and clears when the vessel is unavailable.");
             return;
         }
 
         // Inspection owns formatting so this UI remains independent of game
         // object types. The display contract contains only immutable strings.
-        var display = KsaDevPanel.Inspection.VesselSnapshotFormatter.Format(snapshot);
-        ImGui.Text($"Status: {display.Status}");
-        ImGui.Text($"Vessel: {display.Identity}");
-        ImGui.Text($"Body: {display.ParentBody}");
-        ImGui.Text($"Situation: {display.Situation}");
-        ImGui.TextWrapped($"Velocity: {display.Velocity}");
-        ImGui.Text($"Parts: {display.Parts.Count}");
-        foreach (var part in display.Parts)
-            ImGui.BulletText(part);
+        var now = Environment.TickCount64;
+        if (!snapshot.IsAvailable ||
+            !string.Equals(_displayVesselId, snapshot.Id, StringComparison.Ordinal) ||
+            now >= _nextVesselDisplayUpdate)
+        {
+            _vesselDisplay = KsaDevPanel.Inspection.VesselSnapshotFormatter.Format(snapshot);
+            _displayVesselId = snapshot.IsAvailable ? snapshot.Id : null;
+            _nextVesselDisplayUpdate = now + 200;
+        }
+        var display = _vesselDisplay ?? KsaDevPanel.Inspection.VesselSnapshotFormatter.Format(snapshot);
+        ImGui.TextDisabled($"STATUS  {display.Status}");
+
+        ImGui.SeparatorText("Flight conditions");
+        float2? flightTableSize = null;
+        if (ImGui.BeginTable("KsaDevPanelFlight", 2,
+            ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerV, in flightTableSize, 0f))
+        {
+            DrawDetailRow("Altitude", display.Metrics.Altitude);
+            DrawDetailRow("Surface speed", display.Metrics.SurfaceSpeed);
+            DrawDetailRow("Orbital speed", display.Metrics.OrbitalSpeed);
+            ImGui.EndTable();
+        }
+
+        ImGui.SeparatorText("Motion");
+        float2? motionTableSize = null;
+        if (ImGui.BeginTable("KsaDevPanelMotion", 2,
+            ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerV, in motionTableSize, 0f))
+        {
+            DrawDetailRow("ECL speed", $"{display.Velocity.Speed} {display.Velocity.Units}");
+            DrawDetailRow("Acceleration magnitude", display.Metrics.AccelerationMagnitude);
+            ImGui.EndTable();
+        }
+        if (ImGui.TreeNode("Velocity components · ECL"))
+        {
+            float2? velocityTableSize = null;
+            if (ImGui.BeginTable("KsaDevPanelVelocityComponents", 2,
+                ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerV, in velocityTableSize, 0f))
+            {
+                DrawDetailRow("X", display.Velocity.X);
+                DrawDetailRow("Y", display.Velocity.Y);
+                DrawDetailRow("Z", display.Velocity.Z);
+                ImGui.EndTable();
+            }
+            ImGui.TreePop();
+        }
+        if (ImGui.TreeNode("Acceleration components · body-relative"))
+        {
+            float2? accelerationTableSize = null;
+            if (ImGui.BeginTable("KsaDevPanelAccelerationComponents", 2,
+                ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerV, in accelerationTableSize, 0f))
+            {
+                DrawDetailRow("X", display.Metrics.AccelerationX);
+                DrawDetailRow("Y", display.Metrics.AccelerationY);
+                DrawDetailRow("Z", display.Metrics.AccelerationZ);
+                ImGui.EndTable();
+            }
+            ImGui.TreePop();
+        }
+
+        ImGui.SeparatorText("Vehicle mass & control");
+        float2? vehicleTableSize = null;
+        if (ImGui.BeginTable("KsaDevPanelVehicleMetrics", 2,
+            ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerV, in vehicleTableSize, 0f))
+        {
+            DrawDetailRow("Total mass", display.Metrics.TotalMass);
+            DrawDetailRow("Propellant mass", display.Metrics.PropellantMass);
+            DrawDetailRow("Manual throttle command", display.Metrics.ManualThrottle);
+            ImGui.EndTable();
+        }
+        ImGui.TextDisabled("Altitude is in km. Native speed, acceleration, and mass scales and the throttle range are unverified.");
+
+        ImGui.SeparatorText("Vessel details");
+        float2? tableSize = null;
+        if (ImGui.BeginTable("KsaDevPanelVesselDetails", 2,
+            ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerV, in tableSize, 0f))
+        {
+            DrawDetailRow("Vessel ID", display.Identity);
+            DrawDetailRow("Parent body", display.ParentBody);
+            DrawDetailRow("Situation", display.Situation);
+            DrawDetailRow("Parts", display.Parts.Count.ToString(CultureInfo.InvariantCulture));
+            ImGui.EndTable();
+        }
+
+        ImGui.TextDisabled("Telemetry refreshes five times per second. ECL is the game's root inertial frame.");
+
+        if (ImGui.TreeNode($"Part list ({display.Parts.Count})"))
+        {
+            foreach (var part in display.Parts)
+                ImGui.BulletText(part);
+            ImGui.TreePop();
+        }
     }
 
     private void DrawSettingsCard()
     {
-        ImGui.SeparatorText("Panel Settings");
+        ImGui.SeparatorText("Panel settings");
         var keyName = (string)ImGui.GetKeyName(_settings.Hotkey);
         ImGui.Text($"Toggle hotkey: {keyName}");
 
@@ -186,6 +291,25 @@ public sealed class Workbench : IDisposable
             _captureHotkey = true;
         }
 
+    }
+
+    private void DrawRefreshCard()
+    {
+        ImGui.SeparatorText("Live settings refresh");
+        ImGui.TextWrapped("Edit KsaDevPanel.settings.json in the isolated profile to refresh the shortcut and window layout while the game runs.");
+        ImGui.TextWrapped(_settingsStatus);
+        if (ImGui.SmallButton("Reload settings now"))
+            ReloadSettings();
+        ImGui.SeparatorText("Code changes");
+        ImGui.TextWrapped("Changes to C# code still require rebuilding and restarting KSA with the current loader setup.");
+    }
+
+    private static void DrawDetailRow(string label, string value)
+    {
+        ImGui.TableNextColumn();
+        ImGui.TextDisabled(label);
+        ImGui.TableNextColumn();
+        ImGui.TextWrapped(value);
     }
 
     private void CaptureHotkey()
@@ -241,6 +365,7 @@ public sealed class Workbench : IDisposable
                     writer.Write(json);
                 File.Move(temporary, _settingsPath, overwrite: true);
                 _savedSettings = _settings with { };
+                _lastSettingsWrite = LastWriteTicks(_settingsPath);
             }
             finally
             {
@@ -255,6 +380,73 @@ public sealed class Workbench : IDisposable
         catch (UnauthorizedAccessException)
         {
             // Same fail-open policy as above; the panel remains usable in memory.
+        }
+    }
+
+    private void RefreshChangedSettings()
+    {
+        var writeTicks = LastWriteTicks(_settingsPath);
+        if (writeTicks == 0 || writeTicks == _lastObservedWrite)
+            return;
+        _lastObservedWrite = writeTicks;
+        ReloadSettings();
+    }
+
+    private void ReloadSettings()
+    {
+        try
+        {
+            if (!File.Exists(_settingsPath) ||
+                (File.GetAttributes(_settingsPath) & FileAttributes.ReparsePoint) != 0)
+            {
+                _settingsStatus = "Settings file is missing or is not a regular isolated file.";
+                return;
+            }
+
+            var json = File.ReadAllText(_settingsPath);
+            var candidate = JsonSerializer.Deserialize<UiSettings>(json);
+            if (candidate is null)
+            {
+                _settingsStatus = "Settings were empty; the last valid settings are still active.";
+                return;
+            }
+
+            candidate.Normalize();
+            _settings = candidate;
+            _savedSettings = candidate with { };
+            _showWindow = candidate.Visible;
+            _applyLayout = true;
+            _lastSettingsWrite = LastWriteTicks(_settingsPath);
+            _lastObservedWrite = _lastSettingsWrite;
+            _settingsStatus = "Settings refreshed.";
+        }
+        catch (JsonException)
+        {
+            _settingsStatus = "Settings JSON is invalid; the last valid settings are still active.";
+        }
+        catch (IOException)
+        {
+            _settingsStatus = "Settings file is temporarily unavailable; retrying on the next change.";
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _settingsStatus = "Settings file could not be read; the last valid settings are still active.";
+        }
+    }
+
+    private static long LastWriteTicks(string path)
+    {
+        try
+        {
+            return File.Exists(path) ? File.GetLastWriteTimeUtc(path).Ticks : 0;
+        }
+        catch (IOException)
+        {
+            return 0;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return 0;
         }
     }
 
@@ -282,23 +474,30 @@ public sealed class Workbench : IDisposable
 
     private sealed record UiSettings
     {
+        public int LayoutVersion { get; set; } = 1;
         public ImGuiKey Hotkey { get; set; } = DefaultHotkey;
-        public bool Visible { get; set; }
+        public bool Visible { get; set; } = true;
         public float X { get; set; } = 32;
         public float Y { get; set; } = 72;
-        public float Width { get; set; } = 860;
-        public float Height { get; set; } = 440;
+        public float Width { get; set; } = 1040;
+        public float Height { get; set; } = 700;
 
         public void Normalize()
         {
+            if (LayoutVersion < 2)
+            {
+                Width = 1040;
+                Height = 700;
+                LayoutVersion = 2;
+            }
             if ((int)Hotkey < (int)ImGuiKey.F1 || (int)Hotkey > (int)ImGuiKey.F24)
                 Hotkey = DefaultHotkey;
             if (!float.IsFinite(X) || !float.IsFinite(Y) || !float.IsFinite(Width) || !float.IsFinite(Height))
             {
                 X = 32;
                 Y = 72;
-                Width = 860;
-                Height = 440;
+                Width = 1040;
+                Height = 700;
             }
         }
     }

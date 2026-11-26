@@ -1,7 +1,7 @@
 # Session diagnostics
 
 `KsaDevPanel.Diagnostics.SessionDiagnostics` is the dependency-free boundary between
-the StarMap lifecycle adapter and the future Runtime Console. It records only facts
+the StarMap lifecycle adapter and the Runtime Console. It records only facts
 that the host explicitly observes; it does not inspect game objects, install hooks,
 read saves, write files, access the clipboard, or claim game-wide exception coverage.
 
@@ -9,7 +9,7 @@ read saves, write files, access the clipboard, or claim game-wide exception cove
 
 ```csharp
 var diagnostics = new SessionDiagnostics();
-diagnostics.MarkStartup("0.1.0", "2026.11.25.5949");
+diagnostics.MarkStartup("0.2.0-alpha.1", "2026.11.25.5949");
 diagnostics.MarkFirstGui();
 diagnostics.ObserveWorld(worldReady);
 var text = diagnostics.CopySummary();
@@ -53,11 +53,11 @@ retention decision.
 - Candidate host lifecycle: StarMap `0.5.4`, revision
   `477f495d1c8d59910ad7f37071b77535f59f8c5d` (D-STAR in the parent workspace source catalog);
   the host adapter remains separate from this class.
-- This class has no game or loader references. No game launch, dependency
-  acquisition, disposable install, or runtime test was authorized or performed.
+- This class has no game or loader references. The current isolated game run
+  displayed its run ID and bounded lifecycle summary; see [Verification](Verification.md).
 
-Pure-library checks for the owning test project should cover: fresh non-empty run
-IDs; exact single-line startup output; repeated startup idempotence; control/newline
-normalization; GUI and world transition coalescing; summary privacy; and the event
-and summary bounds. Runtime callback and world-lifetime behavior remain pending an
-authorized isolated smoke test.
+The diagnostics test project passes five checks: fresh non-empty run IDs; exact
+single-line startup output; repeated startup idempotence; control/newline
+normalization; GUI and world transition coalescing; summary privacy; and event and
+summary bounds. Cross-scene callback and world-lifetime behavior remains pending
+additional isolated runtime checks.
